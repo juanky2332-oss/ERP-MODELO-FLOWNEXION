@@ -1,0 +1,11 @@
+﻿[dotenv@17.2.3] injecting env (6) from .env.local -- tip: ÔÜÖ´©Å  specify custom .env file path with { path: '/custom/path/.env' }
+[dotenv@17.2.3] injecting env (0) from .env -- tip: ­ƒøá´©Å  run anywhere with `dotenvx run -- yourcommand`
+­ƒÜÇ Iniciando borrado forzado de la base de datos...
+Borrando facturas... Ô£à OK (0 borrados)
+Borrando albaranes... Ô£à OK (0 borrados)
+Borrando presupuestos... Ô£à OK (0 borrados)
+Borrando logs... Ô£à OK (0 borrados)
+Borrando contactos... Ô£à OK (2 borrados)
+­ƒî▒ Insertando 2 contactos de prueba para Flownexion...
+Ô£à Contactos de prueba insertados.
+­ƒÅü Proceso completado.

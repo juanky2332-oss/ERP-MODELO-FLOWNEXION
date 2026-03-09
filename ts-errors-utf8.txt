@@ -1,0 +1,7 @@
+﻿src/types/supabase.ts(1,1): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(1,6): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(1,9): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(1,17): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(1,21): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2,1): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2,14): error TS1146: Declaration expected.
