@@ -22,40 +22,42 @@ Vitoria-Gasteiz (01012), Álava, España<br>
 }
 
 export async function sendEmailAction(formData: FormData) {
+    console.log('--- Iniciando sendEmailAction ---')
     const to = formData.get('to') as string
     const cc = formData.get('cc') as string
     const subject = formData.get('subject') as string
     const html = formData.get('html') as string
 
+    console.log('Destinatario:', to)
+    console.log('Asunto:', subject)
+
     // Attachments
     const files = formData.getAll('attachments') as File[]
+    console.log('Número de adjuntos:', files.length)
 
     const { user, pass } = getMailCredentials()
     if (!user || !pass) {
+        console.error('ERROR: Credenciales GMAIL no encontradas')
         return {
             success: false,
-            error: 'Credenciales de correo no configuradas. Configura GMAIL_USER y GMAIL_PASS en las variables de entorno.',
+            error: 'Credenciales de correo no configuradas. Configura GMAIL_USER y GMAIL_PASS en Vercel.',
         }
     }
 
+    // Configuración limpia para Serverless (Sin pool para evitar colas de eventos abiertas)
     const transporter = nodemailer.createTransport({
-        host: "smtp.gmail.com",
-        port: 587,
-        secure: false, // true for 465, false for other ports
-        pool: true, // Use a pool of connections
-        maxConnections: 5,
-        maxMessages: 100,
-        connectionTimeout: 10000, // 10s
-        socketTimeout: 30000, // 30s
+        service: 'gmail',
         auth: {
             user,
-            pass, // En Gmail debe ser "Contraseña de aplicación", no la contraseña normal
+            pass,
         },
     });
 
     try {
+        console.log('Procesando adjuntos a Buffer...')
         const attachments = await Promise.all(files.map(async (file) => {
             const buffer = Buffer.from(await file.arrayBuffer())
+            console.log(`Adjunto procesado: ${file.name} (${buffer.length} bytes)`)
             return {
                 filename: file.name,
                 content: buffer
@@ -64,7 +66,8 @@ export async function sendEmailAction(formData: FormData) {
 
         const finalHtml = `${html}${getCorporateSignature()}`
 
-        await transporter.sendMail({
+        console.log('Enviando correo vía Nodemailer...')
+        const info = await transporter.sendMail({
             from: `"Flownexion" <${user}>`,
             to,
             cc,
@@ -72,15 +75,17 @@ export async function sendEmailAction(formData: FormData) {
             html: finalHtml,
             attachments
         })
+        console.log('Correo enviado con éxito. MessageId:', info.messageId)
 
-        // 3. Log to History (notificaciones_historial)
+        // 3. Log to History
         try {
+            console.log('Registrando en historial Supabase...')
             const supabase = await createClient()
             const tipoDoc = formData.get('tipo_documento') as string || 'Documento'
             const numeroDoc = formData.get('numero_documento') as string || 'N/A'
             const ref = formData.get('pedido_referencia') as string || ''
 
-            await supabase.from('notificaciones_historial').insert({
+            const { error: dbError } = await supabase.from('notificaciones_historial').insert({
                 remitente: 'Flownexion',
                 destinatario: cc ? `${to} (CC: ${cc})` : to,
                 tipo_documento: tipoDoc,
@@ -88,18 +93,21 @@ export async function sendEmailAction(formData: FormData) {
                 pedido_referencia: ref,
                 asunto: subject,
                 mensaje: html,
-                usuario_nombre: 'ADMIN' // Default for now
+                usuario_nombre: 'ADMIN'
             })
+
+            if (dbError) throw dbError
+            console.log('Historial registrado correctamente')
         } catch (logError) {
-            console.warn('Could not log to notificaciones_historial:', logError)
+            console.warn('Error al guardar historial (no crítico):', logError)
         }
 
         return { success: true }
     } catch (error: any) {
-        console.error('Email send error:', error)
+        console.error('CRITICAL ERROR en sendEmailAction:', error)
         let message = error?.message || String(error)
         if (message.includes('Username and Password') || message.includes('BadCredentials') || message.includes('535')) {
-            message = 'Gmail no aceptó el usuario/contraseña. Comprueba GMAIL_USER y GMAIL_PASS en las variables de entorno y que uses una Contraseña de aplicación de Google, no la contraseña normal.'
+            message = 'Gmail rechazó las credenciales. Revisa GMAIL_PASS (debe ser Contraseña de Aplicación).'
         }
         return { success: false, error: message }
     }
