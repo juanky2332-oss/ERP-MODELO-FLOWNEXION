@@ -6,13 +6,17 @@ import { es } from 'date-fns/locale'
 export const generatePDF = async (doc: any, type: 'presupuesto' | 'albaran' | 'factura', mode: 'preview' | 'download' | 'blob' = 'download') => {
     const docTitle = type === 'presupuesto' ? 'PRESUPUESTO' : type === 'albaran' ? 'ALBARÁN' : 'FACTURA'
 
-    const jsPDFInstance = new jsPDF()
+    // Habilitar compresión interna de jsPDF para reducir tamaño
+    const jsPDFInstance = new jsPDF({
+        compress: true
+    })
 
-    // 1. Logo
+    // 1. Logo optimizado
     try {
-        const imgProps = await getImageData('/logo.png?v=2')
+        const imgProps = await getImageData('/logo.png?v=4')
         if (imgProps) {
-            jsPDFInstance.addImage(imgProps.data, 'PNG', 15, 25, 16, 21) // Raised logo to Y=25 to clear the text at Y=55
+            // Usar formato JPEG y alias FAST para máxima ligereza en el PDF
+            jsPDFInstance.addImage(imgProps.data, 'JPEG', 15, 25, 16, 21, undefined, 'FAST')
         }
     } catch (e) {
         console.warn('Logo not loaded', e)
@@ -241,14 +245,13 @@ function getImageData(url: string): Promise<{ data: string, width: number, heigh
     return new Promise((resolve) => {
         const img = new Image();
         img.src = url;
-        img.crossOrigin = 'Anonymous'; // Evitar problemas de CORS si aplica
+        img.crossOrigin = 'Anonymous';
         img.onload = () => {
             const canvas = document.createElement('canvas');
 
-            // Limitar resolución máxima para que el PDF no pese demasiado
-            // 800px es más que suficiente para un logo nítido en PDF
-            const MAX_WIDTH = 800;
-            const MAX_HEIGHT = 800;
+            // Resolución reducida a 400px para minimizar peso
+            const MAX_WIDTH = 400;
+            const MAX_HEIGHT = 400;
             let width = img.width;
             let height = img.height;
 
@@ -268,9 +271,8 @@ function getImageData(url: string): Promise<{ data: string, width: number, heigh
             if (!ctx) return resolve(null);
 
             ctx.drawImage(img, 0, 0, width, height);
-            // Usamos JPEG con calidad 0.8 si es muy grande, o PNG si es pequeño
-            // El PNG con transparencia es preferible para logos
-            resolve({ data: canvas.toDataURL('image/png'), width, height });
+            // Usar JPEG con calidad 0.7 para compresión agresiva
+            resolve({ data: canvas.toDataURL('image/jpeg', 0.7), width, height });
         };
         img.onerror = () => resolve(null);
     });
