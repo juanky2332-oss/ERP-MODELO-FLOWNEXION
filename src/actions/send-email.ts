@@ -1,9 +1,14 @@
 'use server'
 
-import { Resend } from 'resend'
+import nodemailer from 'nodemailer'
 import { createClient } from '@/lib/supabase/server'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
+// Credenciales desde env: GMAIL_USER y GMAIL_PASS (en Gmail usar "Contraseña de aplicación")
+function getMailCredentials() {
+    const user = process.env.GMAIL_USER
+    const pass = process.env.GMAIL_PASS
+    return { user, pass }
+}
 
 function getCorporateSignature() {
     return `
@@ -21,14 +26,18 @@ export async function sendEmailAction(formData: FormData) {
     const cc = formData.get('cc') as string
     const subject = formData.get('subject') as string
     const html = formData.get('html') as string
+
+    // Attachments
     const files = formData.getAll('attachments') as File[]
 
-    if (!process.env.RESEND_API_KEY) {
-        return { success: false, error: 'RESEND_API_KEY no configurada en variables de entorno.' }
+    const { user, pass } = getMailCredentials()
+    if (!user || !pass) {
+        return {
+            success: false,
+            error: 'Credenciales de correo no configuradas. Configura GMAIL_USER y GMAIL_PASS en las variables de entorno.',
+        }
     }
 
-<<<<<<< HEAD
-=======
     const transporter = nodemailer.createTransport({
         host: "smtp.gmail.com",
         port: 465, // Use 465 for secure connection directly to avoid connection upgrade overhead
@@ -39,22 +48,27 @@ export async function sendEmailAction(formData: FormData) {
         },
     });
 
->>>>>>> 8d993d9 (fix(mail): Resolve 413 attachment limits and serverless timeouts)
     try {
-        const attachments = await Promise.all(files.map(async (file) => ({
-            filename: file.name,
-            content: Buffer.from(await file.arrayBuffer())
-        })))
+        const attachments = await Promise.all(files.map(async (file) => {
+            const buffer = Buffer.from(await file.arrayBuffer())
+            return {
+                filename: file.name,
+                content: buffer
+            }
+        }))
 
-        await resend.emails.send({
-            from: 'Flownexion <onboarding@resend.dev>',
-            to: to.split(', '),
-            cc: cc ? cc.split(', ') : undefined,
+        const finalHtml = `${html}${getCorporateSignature()}`
+
+        await transporter.sendMail({
+            from: `"Flownexion" <${user}>`,
+            to,
+            cc,
             subject,
-            html: `${html}${getCorporateSignature()}`,
+            html: finalHtml,
             attachments
         })
 
+        // 3. Log to History (notificaciones_historial)
         try {
             const supabase = await createClient()
             const tipoDoc = formData.get('tipo_documento') as string || 'Documento'
@@ -69,14 +83,19 @@ export async function sendEmailAction(formData: FormData) {
                 pedido_referencia: ref,
                 asunto: subject,
                 mensaje: html,
-                usuario_nombre: 'ADMIN'
+                usuario_nombre: 'ADMIN' // Default for now
             })
         } catch (logError) {
-            console.warn('No se pudo registrar en historial:', logError)
+            console.warn('Could not log to notificaciones_historial:', logError)
         }
 
         return { success: true }
     } catch (error: any) {
-        return { success: false, error: error.message }
+        console.error('Email send error:', error)
+        let message = error?.message || String(error)
+        if (message.includes('Username and Password') || message.includes('BadCredentials') || message.includes('535')) {
+            message = 'Gmail no aceptó el usuario/contraseña. Comprueba GMAIL_USER y GMAIL_PASS en las variables de entorno y que uses una Contraseña de aplicación de Google, no la contraseña normal.'
+        }
+        return { success: false, error: message }
     }
 }
