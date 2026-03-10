@@ -1,14 +1,9 @@
 'use server'
 
-import nodemailer from 'nodemailer'
+import { Resend } from 'resend'
 import { createClient } from '@/lib/supabase/server'
 
-// Credenciales desde env: GMAIL_USER y GMAIL_PASS (en Gmail usar "Contraseña de aplicación")
-function getMailCredentials() {
-    const user = process.env.GMAIL_USER
-    const pass = process.env.GMAIL_PASS
-    return { user, pass }
-}
+const resend = new Resend(process.env.RESEND_API_KEY)
 
 function getCorporateSignature() {
     return `
@@ -26,50 +21,24 @@ export async function sendEmailAction(formData: FormData) {
     const cc = formData.get('cc') as string
     const subject = formData.get('subject') as string
     const html = formData.get('html') as string
-
-    // Attachments
     const files = formData.getAll('attachments') as File[]
 
-    const { user, pass } = getMailCredentials()
-    if (!user || !pass) {
-        return {
-            success: false,
-            error: 'Credenciales de correo no configuradas. Configura GMAIL_USER y GMAIL_PASS en las variables de entorno.',
-        }
+    if (!process.env.RESEND_API_KEY) {
+        return { success: false, error: 'RESEND_API_KEY no configurada en variables de entorno.' }
     }
 
-    const transporter = nodemailer.createTransport({
-        host: "smtp.gmail.com",
-        port: 587,
-        secure: false,
-        pool: true,
-        maxConnections: 5,
-        maxMessages: 100,
-        connectionTimeout: 10000,
-        socketTimeout: 30000,
-        auth: {
-            user,
-            pass,
-        },
-    });
-
     try {
-        const attachments = await Promise.all(files.map(async (file) => {
-            const buffer = Buffer.from(await file.arrayBuffer())
-            return {
-                filename: file.name,
-                content: buffer
-            }
-        }))
+        const attachments = await Promise.all(files.map(async (file) => ({
+            filename: file.name,
+            content: Buffer.from(await file.arrayBuffer())
+        })))
 
-        const finalHtml = `${html}${getCorporateSignature()}`
-
-        await transporter.sendMail({
-            from: `"Flownexion" <${user}>`,
-            to,
-            cc,
+        await resend.emails.send({
+            from: 'Flownexion <onboarding@resend.dev>',
+            to: to.split(', '),
+            cc: cc ? cc.split(', ') : undefined,
             subject,
-            html: finalHtml,
+            html: `${html}${getCorporateSignature()}`,
             attachments
         })
 
@@ -90,16 +59,11 @@ export async function sendEmailAction(formData: FormData) {
                 usuario_nombre: 'ADMIN'
             })
         } catch (logError) {
-            console.warn('Could not log to notificaciones_historial:', logError)
+            console.warn('No se pudo registrar en historial:', logError)
         }
 
         return { success: true }
     } catch (error: any) {
-        console.error('Email send error:', error)
-        let message = error?.message || String(error)
-        if (message.includes('Username and Password') || message.includes('BadCredentials') || message.includes('535')) {
-            message = 'Gmail no aceptó el usuario/contraseña. Comprueba GMAIL_USER y GMAIL_PASS en las variables de entorno y que uses una Contraseña de aplicación de Google, no la contraseña normal.'
-        }
-        return { success: false, error: message }
+        return { success: false, error: error.message }
     }
 }
