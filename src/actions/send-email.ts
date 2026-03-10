@@ -39,10 +39,17 @@ export async function sendEmailAction(formData: FormData) {
     }
 
     const transporter = nodemailer.createTransport({
-        service: 'gmail',
+        host: "smtp.gmail.com",
+        port: 587,
+        secure: false, // true for 465, false for other ports
+        pool: true, // Use a pool of connections
+        maxConnections: 5,
+        maxMessages: 100,
+        connectionTimeout: 10000, // 10s
+        socketTimeout: 30000, // 30s
         auth: {
             user,
-            pass,
+            pass, // En Gmail debe ser "Contraseña de aplicación", no la contraseña normal
         },
     });
 

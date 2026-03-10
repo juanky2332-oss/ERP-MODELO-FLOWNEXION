@@ -127,7 +127,7 @@ export default function EmailsPage() {
             } else {
                 // Generate PDF
                 const pdfBlob = await generatePDF(data, type as any, 'blob') as Blob
-                const docLabel = type === 'factura' ? 'Factura' : (type === 'albaran' || type === 'albaran_firmado') ? 'Albarán' : 'Presupuesto'
+                const docLabel = type === 'factura' ? 'Factura' : type === 'albaran' ? 'Albarán' : 'Presupuesto'
                 file = new File([pdfBlob], `${docLabel}_${data.numero}.pdf`, { type: 'application/pdf' })
             }
 
@@ -166,75 +166,69 @@ export default function EmailsPage() {
             formData.append('attachments', file)
         })
 
-        try {
-            const res = await sendEmailAction(formData)
+        const res = await sendEmailAction(formData)
 
-            if (res.success) {
-                toast.success('Correo enviado correctamente')
+        if (res.success) {
+            toast.success('Correo enviado correctamente')
 
-                // Actualizar estados de los documentos adjuntos
-                if (attachedDocs.length > 0) {
-                    try {
-                        console.log('Actualizando estados de documentos enviados:', attachedDocs)
-                        await Promise.all(attachedDocs.map(async (doc) => {
-                            // Intentamos actualizar. Manejamos la inconsistencia de nombres de columna
-                            // Obtener estados actuales primero para no perderlos
-                            // Nota: Idealmente deberíamos hacer un fetch fresco, pero por eficiencia usamos lo que sabemos si es posible.
-                            // Sin embargo, para seguridad, haremos un fetch rápido del status actual o confiaremos en que el backend maneje el merge (supabase update es overwrite).
-                            // Vamos a hacer un fetch rápido para asegurar integridad.
-                            const table = doc.type === 'factura' ? 'facturas' : (doc.type === 'albaran' || doc.type === 'albaran_firmado') ? 'albaranes' : 'presupuestos'
-                            const { data: currentDoc } = await supabase.from(table).select('statuses').eq('id', doc.id).single()
+            // Actualizar estados de los documentos adjuntos
+            if (attachedDocs.length > 0) {
+                try {
+                    console.log('Actualizando estados de documentos enviados:', attachedDocs)
+                    await Promise.all(attachedDocs.map(async (doc) => {
+                        // Intentamos actualizar. Manejamos la inconsistencia de nombres de columna
+                        // Obtener estados actuales primero para no perderlos
+                        // Nota: Idealmente deberíamos hacer un fetch fresco, pero por eficiencia usamos lo que sabemos si es posible.
+                        // Sin embargo, para seguridad, haremos un fetch rápido del status actual o confiaremos en que el backend maneje el merge (supabase update es overwrite).
+                        // Vamos a hacer un fetch rápido para asegurar integridad.
+                        const table = doc.type === 'factura' ? 'facturas' : (doc.type === 'albaran' || doc.type === 'albaran_firmado') ? 'albaranes' : 'presupuestos'
+                        const { data: currentDoc } = await supabase.from(table).select('statuses').eq('id', doc.id).single()
 
-                            const currentStatuses = new Set(currentDoc?.statuses || [])
-                            currentStatuses.add('enviado')
+                        const currentStatuses = new Set(currentDoc?.statuses || [])
+                        currentStatuses.add('enviado')
 
-                            const updateData: any = {
-                                statuses: Array.from(currentStatuses)
-                            }
+                        const updateData: any = {
+                            statuses: Array.from(currentStatuses)
+                        }
 
-                            // Apply specific fields based on document type to avoid "column does not exist" errors
-                            if (doc.type === 'factura') {
-                                updateData.enviada = true
-                                // Removed fecha_envio to ensure update success
-                            } else if (doc.type === 'presupuesto') {
-                                updateData.enviado = true
-                                // Removed fecha_envio to ensure update success
-                            } else if (doc.type === 'albaran' || doc.type === 'albaran_firmado') {
-                                updateData.es_enviado = true
-                            }
+                        // Apply specific fields based on document type to avoid "column does not exist" errors
+                        if (doc.type === 'factura') {
+                            updateData.enviada = true
+                            // Removed fecha_envio to ensure update success
+                        } else if (doc.type === 'presupuesto') {
+                            updateData.enviado = true
+                            // Removed fecha_envio to ensure update success
+                        } else if (doc.type === 'albaran' || doc.type === 'albaran_firmado') {
+                            updateData.es_enviado = true
+                        }
 
-                            const resType = doc.type === 'albaran_firmado' ? 'albaran' : doc.type
-                            const updateRes = await updateDocument(doc.id, updateData, resType)
+                        const resType = doc.type === 'albaran_firmado' ? 'albaran' : doc.type
+                        const updateRes = await updateDocument(doc.id, updateData, resType)
 
-                            if (!updateRes.success) {
-                                console.warn(`No se pudo actualizar el estado de ${doc.type} ${doc.id}:`, updateRes.error)
-                                toast.error(`Error actualizando ${doc.type}: ${JSON.stringify(updateRes.error)}`)
-                            }
-                        }))
+                        if (!updateRes.success) {
+                            console.warn(`No se pudo actualizar el estado de ${doc.type} ${doc.id}:`, updateRes.error)
+                            toast.error(`Error actualizando ${doc.type}: ${JSON.stringify(updateRes.error)}`)
+                        }
+                    }))
 
-                        // Invalidad caches globales post-envío por seguridad
-                        queryClient.invalidateQueries({ queryKey: ['facturas'] })
-                        queryClient.invalidateQueries({ queryKey: ['albaranes'] })
-                        queryClient.invalidateQueries({ queryKey: ['presupuestos'] })
+                    // Invalidad caches globales post-envío por seguridad
+                    queryClient.invalidateQueries({ queryKey: ['facturas'] })
+                    queryClient.invalidateQueries({ queryKey: ['albaranes'] })
+                    queryClient.invalidateQueries({ queryKey: ['presupuestos'] })
 
-                        toast.success('Proceso de actualización de estados finalizado')
-                    } catch (updateError) {
-                        console.error('Error general actualizando estados:', updateError)
-                        toast.error('El correo se envió, pero hubo un error al actualizar los estados en la base de datos.')
-                    }
+                    toast.success('Proceso de actualización de estados finalizado')
+                } catch (updateError) {
+                    console.error('Error general actualizando estados:', updateError)
+                    toast.error('El correo se envió, pero hubo un error al actualizar los estados en la base de datos.')
                 }
-
-                setAttachments([])
-                setAttachedDocs([])
-            } else {
-                toast.error('Error enviando correo: ' + res.error)
             }
-        } catch (error: any) {
-            console.error('Error al invocar Server Action:', error)
-            toast.error('Error de red al enviar el correo. Verifica el tamaño de los adjuntos o tu conexión.')
-        } finally {
-            setLoading(false)
+
+            setAttachments([])
+            setAttachedDocs([])
+        } else {
+            toast.error('Error enviando correo: ' + res.error)
         }
+        setLoading(false)
     }
 
     return (
