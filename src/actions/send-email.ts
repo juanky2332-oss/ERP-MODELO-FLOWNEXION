@@ -40,8 +40,8 @@ export async function sendEmailAction(formData: FormData) {
 
     const transporter = nodemailer.createTransport({
         host: "smtp.gmail.com",
-        port: 465, // Use 465 for secure connection directly to avoid connection upgrade overhead
-        secure: true,
+        port: 587,
+        secure: false, // true for 465, false for other ports
         auth: {
             user,
             pass, // En Gmail debe ser "Contraseña de aplicación", no la contraseña normal
