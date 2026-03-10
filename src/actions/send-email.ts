@@ -27,6 +27,19 @@ export async function sendEmailAction(formData: FormData) {
         return { success: false, error: 'RESEND_API_KEY no configurada en variables de entorno.' }
     }
 
+<<<<<<< HEAD
+=======
+    const transporter = nodemailer.createTransport({
+        host: "smtp.gmail.com",
+        port: 465, // Use 465 for secure connection directly to avoid connection upgrade overhead
+        secure: true,
+        auth: {
+            user,
+            pass, // En Gmail debe ser "Contraseña de aplicación", no la contraseña normal
+        },
+    });
+
+>>>>>>> 8d993d9 (fix(mail): Resolve 413 attachment limits and serverless timeouts)
     try {
         const attachments = await Promise.all(files.map(async (file) => ({
             filename: file.name,
