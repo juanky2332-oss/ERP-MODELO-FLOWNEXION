@@ -166,6 +166,25 @@ export default function EmailsPage() {
             formData.append('attachments', file)
         })
 
+        // Check total payload size to avoid Vercel 4.5MB limit
+        let totalSize = 0;
+        for (const value of (formData as any).values()) {
+            if (value instanceof File) {
+                totalSize += value.size;
+            } else if (typeof value === 'string') {
+                totalSize += value.length;
+            }
+        }
+
+        const sizeInMB = totalSize / (1024 * 1024);
+        console.log(`--- Total Payload Size: ${sizeInMB.toFixed(2)} MB ---`);
+
+        if (sizeInMB > 4.2) {
+            toast.error(`Los adjuntos son demasiado grandes (${sizeInMB.toFixed(2)} MB). El límite es 4.5 MB. Intenta enviar menos documentos o reducir el tamaño de las imágenes.`);
+            setLoading(false);
+            return;
+        }
+
         try {
             console.log('--- Client: Calling sendEmailAction ---')
             const res = await sendEmailAction(formData)

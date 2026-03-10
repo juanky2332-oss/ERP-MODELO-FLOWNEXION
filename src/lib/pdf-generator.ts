@@ -241,14 +241,36 @@ function getImageData(url: string): Promise<{ data: string, width: number, heigh
     return new Promise((resolve) => {
         const img = new Image();
         img.src = url;
+        img.crossOrigin = 'Anonymous'; // Evitar problemas de CORS si aplica
         img.onload = () => {
             const canvas = document.createElement('canvas');
-            canvas.width = img.width;
-            canvas.height = img.height;
+
+            // Limitar resolución máxima para que el PDF no pese demasiado
+            // 800px es más que suficiente para un logo nítido en PDF
+            const MAX_WIDTH = 800;
+            const MAX_HEIGHT = 800;
+            let width = img.width;
+            let height = img.height;
+
+            if (width > MAX_WIDTH) {
+                height *= MAX_WIDTH / width;
+                width = MAX_WIDTH;
+            }
+            if (height > MAX_HEIGHT) {
+                width *= MAX_HEIGHT / height;
+                height = MAX_HEIGHT;
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+
             const ctx = canvas.getContext('2d');
             if (!ctx) return resolve(null);
-            ctx.drawImage(img, 0, 0);
-            resolve({ data: canvas.toDataURL('image/png'), width: img.width, height: img.height });
+
+            ctx.drawImage(img, 0, 0, width, height);
+            // Usamos JPEG con calidad 0.8 si es muy grande, o PNG si es pequeño
+            // El PNG con transparencia es preferible para logos
+            resolve({ data: canvas.toDataURL('image/png'), width, height });
         };
         img.onerror = () => resolve(null);
     });
